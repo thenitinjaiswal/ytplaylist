@@ -1,0 +1,316 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * CodeStudy design system — dark-first, developer oriented.
+ * Layered greys (never pure black), cool blue accent, tight typography.
+ * All colors are oklch tokens. Never hardcode colors in components.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: ui-sans-serif, "Inter var", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-elevated: var(--elevated);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* TUF-style study sheet surface: always light with a coral/orange accent. */
+  --color-sheet: var(--sheet);
+  --color-sheet-foreground: var(--sheet-foreground);
+  --color-sheet-card: var(--sheet-card);
+  --color-sheet-border: var(--sheet-border);
+  --color-sheet-muted: var(--sheet-muted);
+  --color-sheet-muted-foreground: var(--sheet-muted-foreground);
+  --color-sheet-accent: var(--sheet-accent);
+  --color-sheet-accent-foreground: var(--sheet-accent-foreground);
+  --color-sheet-success: var(--sheet-success);
+
+  --shadow-panel: 0 1px 0 0 var(--border) inset;
+  --shadow-float: 0 12px 32px -12px oklch(0 0 0 / 0.65);
+}
+
+/* Dark is the default experience. */
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.168 0.008 260);
+  --foreground: oklch(0.95 0.006 260);
+  --surface: oklch(0.215 0.008 260);
+  --surface-foreground: oklch(0.93 0.006 260);
+  --elevated: oklch(0.262 0.011 260);
+  --card: oklch(0.205 0.008 260);
+  --card-foreground: oklch(0.95 0.006 260);
+  --popover: oklch(0.232 0.01 260);
+  --popover-foreground: oklch(0.95 0.006 260);
+  --primary: oklch(0.665 0.143 261);
+  --primary-foreground: oklch(0.16 0.01 260);
+  --secondary: oklch(0.262 0.011 260);
+  --secondary-foreground: oklch(0.93 0.006 260);
+  --muted: oklch(0.252 0.01 260);
+  --muted-foreground: oklch(0.665 0.017 260);
+  --accent: oklch(0.29 0.014 260);
+  --accent-foreground: oklch(0.95 0.006 260);
+  --destructive: oklch(0.61 0.19 24);
+  --destructive-foreground: oklch(0.97 0.01 24);
+  --success: oklch(0.72 0.15 158);
+  --success-foreground: oklch(0.18 0.03 158);
+  --warning: oklch(0.79 0.14 78);
+  --warning-foreground: oklch(0.2 0.03 78);
+  --border: oklch(0.28 0.011 260);
+  --border-strong: oklch(0.36 0.014 260);
+  --input: oklch(0.3 0.012 260);
+  --ring: oklch(0.665 0.143 261);
+  --sidebar: oklch(0.19 0.008 260);
+  --sidebar-foreground: oklch(0.9 0.006 260);
+  --sidebar-primary: oklch(0.665 0.143 261);
+  --sidebar-primary-foreground: oklch(0.16 0.01 260);
+  --sidebar-accent: oklch(0.26 0.011 260);
+  --sidebar-accent-foreground: oklch(0.95 0.006 260);
+  --sidebar-border: oklch(0.27 0.011 260);
+  --sidebar-ring: oklch(0.665 0.143 261);
+  --chart-1: oklch(0.665 0.143 261);
+  --chart-2: oklch(0.72 0.15 158);
+  --chart-3: oklch(0.79 0.14 78);
+  --chart-4: oklch(0.68 0.16 320);
+  --chart-5: oklch(0.7 0.13 200);
+
+  /* Study sheet palette — follows the app theme so the page background matches,
+     keeping the TUF-style coral accent in both themes. */
+  --sheet: oklch(0.168 0.008 260);
+  --sheet-foreground: oklch(0.95 0.006 260);
+  --sheet-card: oklch(0.205 0.008 260);
+  --sheet-border: oklch(0.28 0.011 260);
+  --sheet-muted: oklch(0.252 0.01 260);
+  --sheet-muted-foreground: oklch(0.665 0.017 260);
+  --sheet-accent: oklch(0.72 0.17 45);
+  --sheet-accent-foreground: oklch(0.18 0.03 45);
+  --sheet-success: oklch(0.72 0.15 158);
+}
+
+.light {
+  --background: oklch(0.99 0.002 260);
+  --foreground: oklch(0.24 0.012 260);
+  --surface: oklch(0.972 0.003 260);
+  --surface-foreground: oklch(0.24 0.012 260);
+  --elevated: oklch(0.95 0.004 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.24 0.012 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.24 0.012 260);
+  --primary: oklch(0.53 0.16 262);
+  --primary-foreground: oklch(0.99 0.002 260);
+  --secondary: oklch(0.955 0.004 260);
+  --secondary-foreground: oklch(0.28 0.012 260);
+  --muted: oklch(0.955 0.004 260);
+  --muted-foreground: oklch(0.5 0.014 260);
+  --accent: oklch(0.94 0.006 260);
+  --accent-foreground: oklch(0.24 0.012 260);
+  --destructive: oklch(0.55 0.2 24);
+  --destructive-foreground: oklch(0.99 0.005 24);
+  --success: oklch(0.55 0.13 158);
+  --success-foreground: oklch(0.99 0.005 158);
+  --warning: oklch(0.66 0.14 70);
+  --warning-foreground: oklch(0.99 0.005 70);
+  --border: oklch(0.9 0.005 260);
+  --border-strong: oklch(0.82 0.008 260);
+  --input: oklch(0.89 0.006 260);
+  --ring: oklch(0.53 0.16 262);
+  --sidebar: oklch(0.975 0.003 260);
+  --sidebar-foreground: oklch(0.28 0.012 260);
+  --sidebar-accent: oklch(0.93 0.006 260);
+  --sidebar-accent-foreground: oklch(0.24 0.012 260);
+  --sidebar-border: oklch(0.9 0.005 260);
+
+  --sheet: oklch(0.99 0.002 80);
+  --sheet-foreground: oklch(0.26 0.01 260);
+  --sheet-card: oklch(1 0 0);
+  --sheet-border: oklch(0.915 0.006 60);
+  --sheet-muted: oklch(0.968 0.006 60);
+  --sheet-muted-foreground: oklch(0.52 0.012 260);
+  --sheet-accent: oklch(0.66 0.19 42);
+  --sheet-accent-foreground: oklch(0.99 0.004 42);
+  --sheet-success: oklch(0.55 0.13 158);
+}
+
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
+  }
+}
+
+@utility panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+@utility hairline {
+  border-color: var(--color-border);
+}
+
+@utility text-mono-xs {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.01em;
+}
+
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* Prose styling for rendered markdown notes */
+@utility note-prose {
+  line-height: 1.65;
+
+  & h1 {
+    font-size: 1.5rem;
+    font-weight: 650;
+    margin: 1.2em 0 0.4em;
+  }
+  & h2 {
+    font-size: 1.2rem;
+    font-weight: 620;
+    margin: 1.1em 0 0.4em;
+  }
+  & h3 {
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin: 1em 0 0.3em;
+  }
+  & p {
+    margin: 0.55em 0;
+  }
+  & ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+    margin: 0.5em 0;
+  }
+  & ol {
+    list-style: decimal;
+    padding-left: 1.35rem;
+    margin: 0.5em 0;
+  }
+  & blockquote {
+    border-left: 2px solid var(--color-primary);
+    padding-left: 0.75rem;
+    color: var(--color-muted-foreground);
+    margin: 0.7em 0;
+  }
+  & code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--color-elevated);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  & pre {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    background: var(--color-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    overflow-x: auto;
+    margin: 0.7em 0;
+  }
+  & pre code {
+    background: none;
+    padding: 0;
+  }
+  & a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  & table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.7em 0;
+    font-size: 0.875rem;
+  }
+  & th,
+  & td {
+    border: 1px solid var(--color-border);
+    padding: 0.4rem 0.55rem;
+    text-align: left;
+  }
+  & th {
+    background: var(--color-elevated);
+  }
+  & hr {
+    border-top: 1px solid var(--color-border);
+    margin: 1.2em 0;
+  }
+  & input[type="checkbox"] {
+    accent-color: var(--color-primary);
+    margin-right: 0.4rem;
+  }
+}
