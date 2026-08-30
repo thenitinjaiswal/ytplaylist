@@ -25,10 +25,29 @@ function loadYouTubeApi() {
  * Player API; floating windows only move/resize the container, so playback and
  * the current timestamp survive every drag, resize and mode change.
  */
-export const WorkspaceVideo = memo(function WorkspaceVideo({ videoId, startAt, title, onApi }) {
+export const WorkspaceVideo = memo(function WorkspaceVideo({
+  videoId,
+  startAt,
+  title,
+  playbackSpeed = 1,
+  onApi,
+}) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
   const startRef = useRef(startAt);
+  const speedRef = useRef(playbackSpeed);
+
+  useEffect(() => {
+    speedRef.current = playbackSpeed;
+    if (playerRef.current?.setPlaybackRate) {
+      try {
+        playerRef.current.setPlaybackRate(playbackSpeed);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [playbackSpeed]);
+
   useEffect(() => {
     let cancelled = false;
     const host = hostRef.current;
@@ -39,6 +58,18 @@ export const WorkspaceVideo = memo(function WorkspaceVideo({ videoId, startAt, t
       mount.style.width = "100%";
       mount.style.height = "100%";
       hostRef.current.appendChild(mount);
+
+      const applyRate = (target) => {
+        const rate = speedRef.current;
+        if (rate) {
+          try {
+            target?.setPlaybackRate?.(rate);
+          } catch {
+            /* ignore */
+          }
+        }
+      };
+
       const player = new yt.Player(mount, {
         videoId,
         playerVars: {
@@ -47,12 +78,29 @@ export const WorkspaceVideo = memo(function WorkspaceVideo({ videoId, startAt, t
           modestbranding: 1,
           playsinline: 1,
         },
+        events: {
+          onReady: (event) => {
+            applyRate(event.target);
+          },
+          onStateChange: (event) => {
+            if (event.data === 1) {
+              applyRate(event.target);
+            }
+          },
+        },
       });
       playerRef.current = player;
       onApi?.({
         play: () => player.playVideo?.(),
         pause: () => player.pauseVideo?.(),
         seekTo: (seconds) => player.seekTo?.(seconds, true),
+        setPlaybackRate: (speed) => {
+          try {
+            player.setPlaybackRate?.(speed);
+          } catch {
+            /* ignore */
+          }
+        },
         getCurrentTime: () => {
           try {
             return player.getCurrentTime?.() ?? 0;

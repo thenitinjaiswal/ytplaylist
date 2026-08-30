@@ -244,6 +244,23 @@ function CoursePage() {
   useEffect(() => {
     if (savedCap) setHoursInput(formatHours(savedCap));
   }, [savedCap]);
+  const speedMutation = useMutation({
+    mutationFn: async (newSpeed) => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth.user) {
+        await supabase
+          .from("preferences")
+          .upsert({ user_id: auth.user.id, playback_speed: newSpeed }, { onConflict: "user_id" });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["preferences"] });
+    },
+  });
+  const handleSpeedSelect = (newSpeed) => {
+    setSpeed(newSpeed);
+    speedMutation.mutate(newSpeed);
+  };
   useEffect(() => {
     if (savedSpeed != null) setSpeed(normalizeSpeed(savedSpeed));
   }, [savedSpeed]);
@@ -527,7 +544,7 @@ function CoursePage() {
                     key={option}
                     type="button"
                     aria-pressed={speed === option}
-                    onClick={() => setSpeed(option)}
+                    onClick={() => handleSpeedSelect(option)}
                     className={cn(
                       "rounded-md border px-2 py-1 text-mono-xs transition-colors",
                       speed === option

@@ -9,6 +9,7 @@ import {
   Globe,
   Code2,
   Expand,
+  Gauge,
   ListVideo,
   Maximize,
   NotebookPen,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { detectLanguage, getLanguage } from "@/lib/languages";
+import { normalizeSpeed, PLAYBACK_SPEEDS } from "@/lib/study-plan";
 import {
   applyMode,
   clampWindow,
@@ -275,6 +277,30 @@ function WorkspacePage() {
       };
     },
   });
+  const [speed, setSpeed] = useState(1);
+  const savedSpeed = query.data?.prefs?.playback_speed;
+  useEffect(() => {
+    if (savedSpeed != null) {
+      setSpeed(normalizeSpeed(savedSpeed));
+    }
+  }, [savedSpeed]);
+  const updateSpeed = useMutation({
+    mutationFn: async (newSpeed) => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) return;
+      await supabase
+        .from("preferences")
+        .upsert({ user_id: auth.user.id, playback_speed: newSpeed }, { onConflict: "user_id" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["preferences"] });
+    },
+  });
+  const handleSpeedChange = (value) => {
+    const nextSpeed = normalizeSpeed(Number(value));
+    setSpeed(nextSpeed);
+    updateSpeed.mutate(nextSpeed);
+  };
   useEffect(() => {
     if (!query.data) return;
     setNotes(query.data.note?.content ?? "");
@@ -426,6 +452,7 @@ function WorkspacePage() {
       videoId={lesson.video_id}
       startAt={startAt}
       title={lesson.title ?? "Lesson video"}
+      playbackSpeed={speed}
       onApi={onVideoApi}
     />
   ) : (
@@ -496,6 +523,20 @@ function WorkspacePage() {
               );
             })}
           </div>
+
+          <Select value={String(speed)} onValueChange={handleSpeedChange}>
+            <SelectTrigger className="h-8 w-[85px] shrink-0" aria-label="Playback speed">
+              <Gauge className="mr-1 size-3.5 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PLAYBACK_SPEEDS.map((s) => (
+                <SelectItem key={s} value={String(s)}>
+                  {s}×
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Select value={canvas?.mode ?? "normal"} onValueChange={(value) => chooseMode(value)}>
             <SelectTrigger className="h-8 w-[150px] shrink-0" aria-label="Workspace mode">
