@@ -12,6 +12,11 @@ function inline(text) {
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|\W)\*([^*\n]+)\*/g, "$1<em>$2</em>");
   out = out.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  // Images must be processed before links to avoid conflict
+  out = out.replace(
+    /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<img src="$2" alt="$1" style="max-width:100%;border-radius:6px;margin:4px 0;" />',
+  );
   out = out.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
     '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>',

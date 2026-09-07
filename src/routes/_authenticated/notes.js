@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Clock, FileText, Plus, Scissors, Trash2 } from "lucide-react";
+import { Clock, Download, FileText, ImagePlus, Loader2, Plus, Scissors, Trash2 } from "lucide-react";
+import { zipSync, strToU8 } from "fflate";
 import { supabase } from "@/integrations/supabase/client";
 import { renderMarkdown } from "@/lib/markdown";
 import { formatClock, formatRelative } from "@/lib/format";
@@ -13,7 +14,94 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+// ── Local draft helpers ────────────────────────────────────────────────────────
+const DRAFT_KEY = (id) => `codestudy:note-draft:${id}`;
+function saveDraft(id, draft) {
+  try { localStorage.setItem(DRAFT_KEY(id), JSON.stringify(draft)); } catch (_) {}
+}
+function loadDraft(id) {
+  try { const raw = localStorage.getItem(DRAFT_KEY(id)); return raw ? JSON.parse(raw) : null; } catch (_) { return null; }
+}
+function clearDraft(id) {
+  try { localStorage.removeItem(DRAFT_KEY(id)); } catch (_) {}
+}
+
+// ── Export helpers ─────────────────────────────────────────────────────────────
+function safeName(title) {
+  return (title || "untitled").replace(/[/\\?%*:|"<>]/g, "-").trim().slice(0, 80);
+}
+function exportAllAsZip(notes, courseTitle) {
+  if (!notes.length) { toast.error("No notes to export"); return; }
+  const files = {};
+  const seen = {};
+  notes.forEach((note) => {
+    const base = safeName(note.title);
+    const count = seen[base] = (seen[base] ?? 0) + 1;
+    const name = count > 1 ? `${base} (${count}).md` : `${base}.md`;
+    const header = [
+      `# ${note.title || "Untitled"}`,
+      `> Course: ${courseTitle(note.course_id)}`,
+      `> Saved: ${new Date(note.updated_at).toLocaleString()}`,
+      "",
+    ].join("\n");
+    files[name] = strToU8(header + (note.content || ""));
+  });
+  const zipped = zipSync(files);
+  const blob = new Blob([zipped], { type: "application/zip" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `LearnFlow-Notes-${new Date().toISOString().slice(0, 10)}.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast.success(`✅ ${notes.length} notes exported as ZIP!`);
+}
+
+/**
+ * Compress an image via canvas.
+ * - Uses WebP if the browser supports it (≈50% smaller than JPEG).
+ * - Downscales to max 900px on the longest side.
+ * - Quality 0.72 — sharp enough for notes, aggressively small.
+ * Returns { blob, mime, ext, originalKB, compressedKB }.
+ */
+async function compressImage(file) {
+  const originalKB = Math.round(file.size / 1024);
+  // Guard: reject obviously non-image or huge files early
+  if (file.size > 20 * 1024 * 1024) throw new Error("File too large (max 20 MB original)");
+  const supportsWebP = await new Promise((res) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    res(c.toDataURL("image/webp").startsWith("data:image/webp"));
+  });
+  const mime = supportsWebP ? "image/webp" : "image/jpeg";
+  const ext  = supportsWebP ? "webp" : "jpg";
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 900;
+      const longest = Math.max(img.width, img.height);
+      const scale = longest > MAX ? MAX / longest : 1;
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) =>
+          blob
+            ? resolve({ blob, mime, ext, originalKB, compressedKB: Math.round(blob.size / 1024) })
+            : reject(new Error("Canvas toBlob failed")),
+        mime,
+        0.72,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image load failed")); };
+    img.src = url;
+  });
+}
 const searchSchema = z.object({
   note: z.string().optional(),
   tab: z.enum(["notes", "snippets", "timestamps"]).optional(),
@@ -39,6 +127,9 @@ function NotesPage() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState(search.note ?? null);
   const [draft, setDraft] = useState(null);
+  const [hasLocalDraft, setHasLocalDraft] = useState(false);
+  const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const query = useQuery({
     queryKey: ["notes-page"],
     queryFn: async () => {
@@ -65,8 +156,17 @@ function NotesPage() {
     () => notes.find((note) => note.id === activeId) ?? notes[0] ?? null,
     [notes, activeId],
   );
+  // Restore from Supabase on note switch; prefer local unsaved draft if one exists
   useEffect(() => {
-    if (active) setDraft({ title: active.title, content: active.content });
+    if (!active) return;
+    const local = loadDraft(active.id);
+    if (local) {
+      setDraft(local);
+      setHasLocalDraft(true);
+    } else {
+      setDraft({ title: active.title, content: active.content });
+      setHasLocalDraft(false);
+    }
   }, [active?.id]);
   const save = useMutation({
     mutationFn: async () => {
@@ -78,7 +178,9 @@ function NotesPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Note saved");
+      clearDraft(active?.id);
+      setHasLocalDraft(false);
+      toast.success("Note saved to cloud");
       queryClient.invalidateQueries({ queryKey: ["notes-page"] });
     },
     onError: () => toast.error("Could not save that note"),
@@ -117,15 +219,70 @@ function NotesPage() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notes-page"] }),
   });
+  const uploadImage = useMutation({
+    mutationFn: async (file) => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) throw new Error("Not signed in");
+      const { blob, mime, ext, originalKB, compressedKB } = await compressImage(file);
+      const path = `${auth.user.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("note-images")
+        .upload(path, blob, { contentType: mime, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("note-images").getPublicUrl(path);
+      return { url: pub.publicUrl, originalKB, compressedKB };
+    },
+    onSuccess: ({ url, originalKB, compressedKB }) => {
+      const area = textareaRef.current;
+      const at = area ? (area.selectionStart ?? (draft?.content ?? "").length) : (draft?.content ?? "").length;
+      const content = draft?.content ?? "";
+      const before = content.slice(0, at);
+      const after = content.slice(at);
+      const prefix = before.length && !before.endsWith("\n") ? "\n" : "";
+      const snippet = `![image](${url})`;
+      setDraft((d) => ({ ...d, content: `${before}${prefix}${snippet}${after}` }));
+      const saved = Math.round((1 - compressedKB / originalKB) * 100);
+      toast.success(`✅ Image inserted! ${originalKB} KB → ${compressedKB} KB (${saved}% saved)`);
+    },
+    onError: (err) => toast.error(`Image upload failed: ${err.message}`),
+  });
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    uploadImage.mutate(file);
+  };
+
   const courseTitle = (id) =>
     query.data?.courses.find((course) => course.id === id)?.title ?? "General";
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-5">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Notes</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Markdown notes, video timestamps and saved snippets across every course.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Notes</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Markdown notes, video timestamps and saved snippets across every course.
+            </p>
+          </div>
+          {notes.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => exportAllAsZip(notes, courseTitle)}
+                >
+                  <Download className="size-4" />
+                  Export ZIP
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download all notes as .md files in a ZIP</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       <Tabs
@@ -199,12 +356,49 @@ function NotesPage() {
                   <div className="flex gap-2">
                     <Input
                       value={draft.title}
-                      onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                      onChange={(event) => {
+                        const next = { ...draft, title: event.target.value };
+                        setDraft(next);
+                        saveDraft(active.id, next);
+                        setHasLocalDraft(true);
+                      }}
                       className="text-base font-semibold"
                     />
                     <Button onClick={() => save.mutate()} disabled={save.isPending}>
                       Save
                     </Button>
+                    {hasLocalDraft && (
+                      <span className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-600">
+                        ● Unsaved local draft
+                      </span>
+                    )}
+                    {/* Hidden file input for image upload */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      id="note-image-upload"
+                      onChange={handleFileChange}
+                    />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Upload image"
+                          disabled={uploadImage.isPending}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          {uploadImage.isPending ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <ImagePlus className="size-4" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Upload & insert image (auto-compressed)</TooltipContent>
+                    </Tooltip>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -215,8 +409,14 @@ function NotesPage() {
                     </Button>
                   </div>
                   <Textarea
+                    ref={textareaRef}
                     value={draft.content}
-                    onChange={(event) => setDraft({ ...draft, content: event.target.value })}
+                    onChange={(event) => {
+                      const next = { ...draft, content: event.target.value };
+                      setDraft(next);
+                      saveDraft(active.id, next);
+                      setHasLocalDraft(true);
+                    }}
                     placeholder="Write markdown… # heading, - list, ```code```"
                     className="min-h-56 font-mono text-sm"
                   />

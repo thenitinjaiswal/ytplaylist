@@ -1,11 +1,56 @@
 import { useRef, useState } from "react";
-import { Clock, Code, Heading2, List, ListChecks, Loader2, NotebookPen, Save } from "lucide-react";
+import { Clock, Code, Heading2, ImagePlus, List, ListChecks, Loader2, NotebookPen, Save } from "lucide-react";
 import { renderMarkdown } from "@/lib/markdown";
 import { PanelFrame } from "@/components/ide/panel-frame";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+/**
+ * Compress an image via canvas.
+ * - Uses WebP if the browser supports it (≈50% smaller than JPEG).
+ * - Downscales to max 900px on the longest side.
+ * - Quality 0.72 — sharp enough for notes, aggressively small.
+ * Returns { blob, mime, ext, originalKB, compressedKB }.
+ */
+async function compressImage(file) {
+  const originalKB = Math.round(file.size / 1024);
+  if (file.size > 20 * 1024 * 1024) throw new Error("File too large (max 20 MB original)");
+  const supportsWebP = await new Promise((res) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    res(c.toDataURL("image/webp").startsWith("data:image/webp"));
+  });
+  const mime = supportsWebP ? "image/webp" : "image/jpeg";
+  const ext  = supportsWebP ? "webp" : "jpg";
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 900;
+      const longest = Math.max(img.width, img.height);
+      const scale = longest > MAX ? MAX / longest : 1;
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) =>
+          blob
+            ? resolve({ blob, mime, ext, originalKB, compressedKB: Math.round(blob.size / 1024) })
+            : reject(new Error("Canvas toBlob failed")),
+        mime,
+        0.72,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image load failed")); };
+    img.src = url;
+  });
+}
 function stamp(seconds) {
   const total = Math.max(0, Math.floor(seconds));
   const m = Math.floor(total / 60);
@@ -26,6 +71,8 @@ export function NotesPanel({
 }) {
   const [tab, setTab] = useState("write");
   const areaRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const insert = (snippet) => {
     const area = areaRef.current;
     const at = area ? (area.selectionStart ?? value.length) : value.length;
@@ -40,6 +87,30 @@ export function NotesPanel({
       area?.focus();
       area?.setSelectionRange(caret, caret);
     });
+  };
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploadingImage(true);
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) throw new Error("Not signed in");
+      const { blob, mime, ext, originalKB, compressedKB } = await compressImage(file);
+      const path = `${auth.user.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("note-images")
+        .upload(path, blob, { contentType: mime, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("note-images").getPublicUrl(path);
+      insert(`![image](${pub.publicUrl})`);
+      const saved = Math.round((1 - compressedKB / originalKB) * 100);
+      toast.success(`✅ Image inserted! ${originalKB} KB → ${compressedKB} KB (${saved}% saved)`);
+    } catch (err) {
+      toast.error(`Image upload failed: ${err.message}`);
+    } finally {
+      setUploadingImage(false);
+    }
   };
   const tools = (
     <>
@@ -77,6 +148,34 @@ export function NotesPanel({
           <TooltipContent side="bottom">{tool.label}</TooltipContent>
         </Tooltip>
       ))}
+      {/* Image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        id="notes-panel-image-upload"
+        onChange={handleImageUpload}
+      />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-6 text-muted-foreground hover:text-foreground"
+            aria-label="Upload image"
+            disabled={uploadingImage}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploadingImage ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <ImagePlus className="size-3" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Upload & insert image (auto-compressed)</TooltipContent>
+      </Tooltip>
       <Button
         size="sm"
         variant="ghost"
