@@ -199,11 +199,11 @@ export const connectGithubToken = createServerFn({ method: "POST" })
     }
 
     // 2. Try saving to github_connections table
-    const admin = await getAdminSafe();
-    if (admin) {
-      await admin
-        .from("github_connections")
-        .upsert(
+    try {
+      const admin = await getAdminSafe();
+      const client = admin || context.supabase;
+      if (client) {
+        await client.from("github_connections").upsert(
           {
             user_id: context.userId,
             login: ghUser.login,
@@ -213,37 +213,34 @@ export const connectGithubToken = createServerFn({ method: "POST" })
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" },
-        )
-        .catch(() => {});
-    } else {
-      await context.supabase
-        .from("github_connections")
-        .upsert(
-          {
-            user_id: context.userId,
-            login: ghUser.login,
-            avatar_url: ghUser.avatar_url,
-            access_token: token,
-            scope: "pat",
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        )
-        .catch(() => {});
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to save to github_connections:", e);
     }
 
     // 3. Update public.profiles
-    await context.supabase
-      .from("profiles")
-      .update({ github_login: ghUser.login })
-      .eq("id", context.userId)
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("profiles")
+          .update({ github_login: ghUser.login })
+          .eq("id", context.userId);
+      }
+    } catch (e) {
+      console.warn("Failed to update profiles github_login:", e);
+    }
 
     // 4. Record activity
-    await context.supabase
-      .from("activities")
-      .insert({ user_id: context.userId, kind: "github_connected" })
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("activities")
+          .insert({ user_id: context.userId, kind: "github_connected" });
+      }
+    } catch (e) {
+      console.warn("Failed to insert github_connected activity:", e);
+    }
 
     return {
       ok: true,
@@ -323,11 +320,11 @@ export const connectGithub = createServerFn({ method: "POST" })
       });
     } catch {}
 
-    const admin = await getAdminSafe();
-    if (admin) {
-      await admin
-        .from("github_connections")
-        .upsert(
+    try {
+      const admin = await getAdminSafe();
+      const client = admin || context.supabase;
+      if (client) {
+        await client.from("github_connections").upsert(
           {
             user_id: context.userId,
             login: user.data.login,
@@ -337,20 +334,32 @@ export const connectGithub = createServerFn({ method: "POST" })
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" },
-        )
-        .catch(() => {});
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to save to github_connections:", e);
     }
 
-    await context.supabase
-      .from("profiles")
-      .update({ github_login: user.data.login })
-      .eq("id", context.userId)
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("profiles")
+          .update({ github_login: user.data.login })
+          .eq("id", context.userId);
+      }
+    } catch (e) {
+      console.warn("Failed to update profiles github_login:", e);
+    }
 
-    await context.supabase
-      .from("activities")
-      .insert({ user_id: context.userId, kind: "github_connected" })
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("activities")
+          .insert({ user_id: context.userId, kind: "github_connected" });
+      }
+    } catch (e) {
+      console.warn("Failed to insert github_connected activity:", e);
+    }
 
     return { ok: true, login: user.data.login };
   });
@@ -372,27 +381,30 @@ export const disconnectGithub = createServerFn({ method: "POST" })
     } catch {}
 
     // 2. Clear github_connections table
-    const admin = await getAdminSafe();
-    if (admin) {
-      await admin
-        .from("github_connections")
-        .delete()
-        .eq("user_id", context.userId)
-        .catch(() => {});
-    } else {
-      await context.supabase
-        .from("github_connections")
-        .delete()
-        .eq("user_id", context.userId)
-        .catch(() => {});
+    try {
+      const admin = await getAdminSafe();
+      const client = admin || context.supabase;
+      if (client) {
+        await client
+          .from("github_connections")
+          .delete()
+          .eq("user_id", context.userId);
+      }
+    } catch (e) {
+      console.warn("Failed to clear github_connections:", e);
     }
 
     // 3. Clear profile github_login
-    await context.supabase
-      .from("profiles")
-      .update({ github_login: null })
-      .eq("id", context.userId)
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("profiles")
+          .update({ github_login: null })
+          .eq("id", context.userId);
+      }
+    } catch (e) {
+      console.warn("Failed to clear profile github_login:", e);
+    }
 
     return { ok: true };
   });
@@ -462,29 +474,39 @@ export const createRepo = createServerFn({ method: "POST" })
     });
     if (!res.ok) return { ok: false, error: res.error };
 
-    await context.supabase
-      .from("github_repos")
-      .upsert(
-        {
-          user_id: context.userId,
-          course_id: data.courseId ?? null,
-          full_name: res.data.full_name,
-          html_url: res.data.html_url,
-          is_private: res.data.private,
-          default_branch: res.data.default_branch,
-        },
-        { onConflict: "user_id,full_name" },
-      )
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("github_repos")
+          .upsert(
+            {
+              user_id: context.userId,
+              course_id: data.courseId ?? null,
+              full_name: res.data.full_name,
+              html_url: res.data.html_url,
+              is_private: res.data.private,
+              default_branch: res.data.default_branch,
+            },
+            { onConflict: "user_id,full_name" },
+          );
+      }
+    } catch (e) {
+      console.warn("Failed to upsert github_repos:", e);
+    }
 
-    await context.supabase
-      .from("activities")
-      .insert({
-        user_id: context.userId,
-        kind: "repo_created",
-        meta: { repo: res.data.full_name },
-      })
-      .catch(() => {});
+    try {
+      if (context.supabase) {
+        await context.supabase
+          .from("activities")
+          .insert({
+            user_id: context.userId,
+            kind: "repo_created",
+            meta: { repo: res.data.full_name },
+          });
+      }
+    } catch (e) {
+      console.warn("Failed to insert repo_created activity:", e);
+    }
 
     return {
       ok: true,
