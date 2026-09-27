@@ -3,7 +3,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  CheckCircle2,
   ExternalLink,
   FolderGit2,
   Github,
@@ -16,10 +15,10 @@ import {
   Layers,
   ChevronDown,
   ChevronRight,
-  ShieldCheck,
 } from "lucide-react";
 import {
   commitAndPush,
+  connectGithubToken,
   createRepo,
   getGithubStatus,
   listRepos,
@@ -74,7 +73,13 @@ export function ProjectsPushModal({
   const getRepos = useServerFn(listRepos);
   const makeRepo = useServerFn(createRepo);
   const doPush = useServerFn(commitAndPush);
+  const connectTokenFn = useServerFn(connectGithubToken);
 
+  // Connection state
+  const [tokenInput, setTokenInput] = useState("");
+  const [connectingToken, setConnectingToken] = useState(false);
+
+  // Form state
   const [selectedRepo, setSelectedRepo] = useState("");
   const [newRepoName, setNewRepoName] = useState("");
   const [newRepoDesc, setNewRepoDesc] = useState("");
@@ -156,6 +161,27 @@ export function ProjectsPushModal({
       setSelectedRepo(reposQuery.data.repos[0].fullName);
     }
   }, [reposQuery.data?.repos, selectedRepo]);
+
+  const handleConnectInlineToken = async (e) => {
+    e?.preventDefault();
+    if (!tokenInput.trim()) {
+      toast.error("Please enter a GitHub Personal Access Token.");
+      return;
+    }
+    setConnectingToken(true);
+    try {
+      const res = await connectTokenFn({ data: { token: tokenInput.trim() } });
+      if (!res.ok) throw new Error(res.error || "Failed to connect GitHub token.");
+      toast.success(`Connected to GitHub as @${res.login}!`);
+      setTokenInput("");
+      queryClient.invalidateQueries({ queryKey: ["github-status"] });
+      queryClient.invalidateQueries({ queryKey: ["github-repos"] });
+    } catch (err) {
+      toast.error(err.message || "Could not connect GitHub token.");
+    } finally {
+      setConnectingToken(false);
+    }
+  };
 
   const handlePush = async () => {
     if (preparedFiles.length === 0) {
@@ -256,21 +282,62 @@ export function ProjectsPushModal({
         </DialogHeader>
 
         {!isConnected && !statusQuery.isLoading ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200 space-y-3">
-            <div className="flex items-center gap-2 font-medium">
-              <Github className="size-4" />
-              GitHub is not connected yet
+          <div className="rounded-lg border border-primary/30 bg-surface/90 p-4 text-sm space-y-3.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <Github className="size-4 text-primary" />
+                Connect Your GitHub Account
+              </div>
+              <a
+                href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=CodeStudy%20Integration"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Generate Token on GitHub <ExternalLink className="size-3" />
+              </a>
             </div>
-            <p className="text-xs text-amber-300/80 leading-relaxed">
-              Connect your GitHub account using a Personal Access Token to push files directly to your repositories.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Enter your GitHub Personal Access Token (with <code className="text-primary font-mono text-[10px]">repo</code> & <code className="text-primary font-mono text-[10px]">read:user</code> scope) to connect instantly:
             </p>
-            <Link
-              to="/github"
-              onClick={() => onOpenChange(false)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition"
-            >
-              Connect GitHub Now <ExternalLink className="size-3" />
-            </Link>
+
+            <form onSubmit={handleConnectInlineToken} className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                className="h-8 text-xs font-mono bg-background"
+                disabled={connectingToken}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                className="h-8 shrink-0 text-xs gap-1.5"
+                disabled={connectingToken || !tokenInput.trim()}
+              >
+                {connectingToken ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" /> Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Github className="size-3.5" /> Connect
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
+              <span>Token is encrypted & saved to your profile</span>
+              <Link
+                to="/github"
+                onClick={() => onOpenChange(false)}
+                className="text-muted-foreground hover:text-foreground underline inline-flex items-center gap-1"
+              >
+                Full GitHub Settings <ExternalLink className="size-2.5" />
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="space-y-4 py-2">
