@@ -30,22 +30,23 @@ function jsxInJsPrePlugin() {
 }
 
 export default defineConfig({
-  optimizeDeps: {
-    esbuildOptions: {
-      loader: {
-        ".js": "jsx",
-      },
-    },
-    rolldownOptions: {
-      moduleTypes: {
-        ".js": "jsx",
-      },
-    },
+  react: {
+    include: /\.(jsx|js|tsx|ts)$/,
   },
   plugins: [jsxInJsPrePlugin()],
   tanstackStart: {
+    client: { entry: "client" },
     // Redirect TanStack Start's bundled server entry to src/server.js (our SSR error wrapper).
-    // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  vite: {
+    optimizeDeps: {
+      rolldownOptions: {
+        moduleTypes: {
+          ".js": "jsx",
+        },
+        plugins: [jsxInJsPrePlugin()],
+      },
+    },
   },
 });
