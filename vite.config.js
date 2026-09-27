@@ -35,7 +35,6 @@ export default defineConfig({
   },
   plugins: [jsxInJsPrePlugin()],
   tanstackStart: {
-    client: { entry: "client" },
     // Redirect TanStack Start's bundled server entry to src/server.js (our SSR error wrapper).
     server: { entry: "server" },
   },
