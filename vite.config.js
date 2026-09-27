@@ -82,6 +82,15 @@ function patchCompiledNitro(dir) {
       }
     }
   }
+
+  // Also ensure a dist folder exists with static assets as fallback for Vercel's Vite preset
+  try {
+    const staticDir = path.resolve(process.cwd(), ".vercel/output/static");
+    const distDir = path.resolve(process.cwd(), "dist");
+    if (fs.existsSync(staticDir)) {
+      fs.cpSync(staticDir, distDir, { recursive: true, force: true });
+    }
+  } catch {}
 }
 
 export default defineConfig({
