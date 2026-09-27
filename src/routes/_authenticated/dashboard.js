@@ -28,26 +28,36 @@ function Dashboard() {
   const query = useQuery({
     queryKey: ["dashboard"],
     queryFn: async () => {
-      const [courses, lessons, progress, activities] = await Promise.all([
-        supabase
-          .from("courses")
-          .select("id, title, channel_title, thumbnail_url, video_count, total_seconds, updated_at")
-          .order("updated_at", { ascending: false }),
-        supabase.from("lessons").select("id, course_id, duration_seconds, position, title"),
-        supabase
-          .from("lesson_progress")
-          .select(
-            "lesson_id, course_id, watched_seconds, completed, last_position, last_watched_at",
-          )
-          .order("last_watched_at", { ascending: false }),
-        supabase.from("activities").select("day, seconds, kind, created_at").limit(1000),
-      ]);
-      return {
-        courses: courses.data ?? [],
-        lessons: lessons.data ?? [],
-        progress: progress.data ?? [],
-        activities: activities.data ?? [],
-      };
+      try {
+        const [courses, lessons, progress, activities] = await Promise.all([
+          supabase
+            .from("courses")
+            .select("id, title, channel_title, thumbnail_url, video_count, total_seconds, updated_at")
+            .order("updated_at", { ascending: false }),
+          supabase.from("lessons").select("id, course_id, duration_seconds, position, title"),
+          supabase
+            .from("lesson_progress")
+            .select(
+              "lesson_id, course_id, watched_seconds, completed, last_position, last_watched_at",
+            )
+            .order("last_watched_at", { ascending: false }),
+          supabase.from("activities").select("day, seconds, kind, created_at").limit(1000),
+        ]);
+        return {
+          courses: courses?.data ?? [],
+          lessons: lessons?.data ?? [],
+          progress: progress?.data ?? [],
+          activities: activities?.data ?? [],
+        };
+      } catch (e) {
+        console.warn("Failed to load dashboard data:", e);
+        return {
+          courses: [],
+          lessons: [],
+          progress: [],
+          activities: [],
+        };
+      }
     },
   });
 
@@ -65,12 +75,12 @@ function Dashboard() {
     );
   }
 
-  const data = query.data;
-  const streak = computeStreak((data?.activities ?? []).map((a) => a.day));
-  const totalWatched = (data?.progress ?? []).reduce((sum, p) => sum + p.watched_seconds, 0);
-  const completedLessons = (data?.progress ?? []).filter((p) => p.completed).length;
+  const data = query.data ?? { courses: [], lessons: [], progress: [], activities: [] };
+  const streak = computeStreak((data.activities ?? []).map((a) => a.day));
+  const totalWatched = (data.progress ?? []).reduce((sum, p) => sum + p.watched_seconds, 0);
+  const completedLessons = (data.progress ?? []).filter((p) => p.completed).length;
   const today = toDayKey(new Date());
-  const todaySeconds = (data?.activities ?? [])
+  const todaySeconds = (data.activities ?? [])
     .filter((a) => a.day === today)
     .reduce((sum, a) => sum + a.seconds, 0);
 
@@ -117,12 +127,12 @@ function Dashboard() {
           icon={Trophy}
           label="Lessons completed"
           value={String(completedLessons)}
-          hint={`of ${data?.lessons.length ?? 0}`}
+          hint={`of ${data.lessons?.length ?? 0}`}
         />
         <StatCard
           icon={BookOpen}
           label="Courses"
-          value={String(data?.courses.length ?? 0)}
+          value={String(data.courses?.length ?? 0)}
           hint="imported playlists"
         />
       </div>
@@ -162,7 +172,7 @@ function Dashboard() {
           </Link>
         </div>
 
-        {(data?.courses.length ?? 0) === 0 ? (
+        {(data.courses?.length ?? 0) === 0 ? (
           <EmptyState
             icon={BookOpen}
             title="No courses yet"
@@ -177,8 +187,8 @@ function Dashboard() {
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {data?.courses.slice(0, 6).map((course) => {
-              const courseLessons = (data?.lessons ?? []).filter((l) => l.course_id === course.id);
+            {(data.courses ?? []).slice(0, 6).map((course) => {
+              const courseLessons = (data.lessons ?? []).filter((l) => l.course_id === course.id);
               const stats = computeCourseStats(
                 courseLessons,
                 (data?.progress ?? []).filter((p) => p.course_id === course.id),

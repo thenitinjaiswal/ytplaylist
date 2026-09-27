@@ -58,7 +58,7 @@ function CoursePage() {
     mutationFn: async ({ lessonId, completed }) => {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) throw new Error("Not signed in");
-      const lesson = query.data?.lessons.find((l) => l.id === lessonId);
+      const lesson = query.data?.lessons?.find((l) => l.id === lessonId);
       const { error } = await supabase.from("lesson_progress").upsert(
         {
           user_id: auth.user.id,
@@ -110,7 +110,7 @@ function CoursePage() {
       </Link>
 
       <section className="flex flex-wrap gap-5 rounded-lg border border-border bg-surface p-5">
-        {data?.course.thumbnail_url ? (
+        {data?.course?.thumbnail_url ? (
           <img
             src={data.course.thumbnail_url}
             alt={data.course.title}
@@ -120,9 +120,9 @@ function CoursePage() {
         <div className="min-w-0 flex-1 space-y-3">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              {data?.course.title}
+              {data?.course?.title}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">{data?.course.channel_title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{data?.course?.channel_title}</p>
           </div>
           <ProgressBar value={stats.percent} />
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-mono-xs text-muted-foreground">
@@ -152,7 +152,7 @@ function CoursePage() {
             ) : null}
             <Button asChild size="sm" variant="outline" className="gap-2">
               <a
-                href={`https://www.youtube.com/playlist?list=${data?.course.playlist_id}`}
+                href={data?.course?.playlist_id ? `https://www.youtube.com/playlist?list=${data.course.playlist_id}` : "#"}
                 target="_blank"
                 rel="noreferrer noopener"
               >
@@ -168,7 +168,7 @@ function CoursePage() {
           <h2 className="text-sm font-semibold text-foreground">Lessons</h2>
         </div>
         <ul className="divide-y divide-border">
-          {data?.lessons.map((lesson) => {
+          {(data?.lessons ?? []).map((lesson) => {
             const progress = byLesson.get(lesson.id);
             const percent =
               lesson.duration_seconds > 0

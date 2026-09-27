@@ -46,22 +46,32 @@ function NotesPage() {
   const query = useQuery({
     queryKey: ["notes-page"],
     queryFn: async () => {
-      const [notes, snippets, timestamps, courses] = await Promise.all([
-        supabase.from("notes").select("*").order("updated_at", { ascending: false }),
-        supabase.from("snippets").select("*").order("created_at", { ascending: false }),
-        supabase
-          .from("timestamp_notes")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(200),
-        supabase.from("courses").select("id, title"),
-      ]);
-      return {
-        notes: notes.data ?? [],
-        snippets: snippets.data ?? [],
-        timestamps: timestamps.data ?? [],
-        courses: courses.data ?? [],
-      };
+      try {
+        const [notes, snippets, timestamps, courses] = await Promise.all([
+          supabase.from("notes").select("*").order("updated_at", { ascending: false }),
+          supabase.from("snippets").select("*").order("created_at", { ascending: false }),
+          supabase
+            .from("timestamp_notes")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(200),
+          supabase.from("courses").select("id, title"),
+        ]);
+        return {
+          notes: notes?.data ?? [],
+          snippets: snippets?.data ?? [],
+          timestamps: timestamps?.data ?? [],
+          courses: courses?.data ?? [],
+        };
+      } catch (e) {
+        console.warn("Failed to load notes data:", e);
+        return {
+          notes: [],
+          snippets: [],
+          timestamps: [],
+          courses: [],
+        };
+      }
     },
   });
 
@@ -129,7 +139,7 @@ function NotesPage() {
   });
 
   const courseTitle = (id) =>
-    query.data?.courses.find((course) => course.id === id)?.title ?? "General";
+    query.data?.courses?.find((course) => course.id === id)?.title ?? "General";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-5">
@@ -248,7 +258,7 @@ function NotesPage() {
         </TabsContent>
 
         <TabsContent value="timestamps" className="mt-5">
-          {(query.data?.timestamps.length ?? 0) === 0 ? (
+          {(query.data?.timestamps?.length ?? 0) === 0 ? (
             <EmptyState
               icon={Clock}
               title="No timestamped notes"
@@ -256,7 +266,7 @@ function NotesPage() {
             />
           ) : (
             <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
-              {query.data?.timestamps.map((note) => (
+              {(query.data?.timestamps ?? []).map((note) => (
                 <li key={note.id} className="flex items-start gap-3 px-4 py-3">
                   <Link
                     to="/course/$courseId/lesson/$lessonId"
@@ -277,7 +287,7 @@ function NotesPage() {
         </TabsContent>
 
         <TabsContent value="snippets" className="mt-5">
-          {(query.data?.snippets.length ?? 0) === 0 ? (
+          {(query.data?.snippets?.length ?? 0) === 0 ? (
             <EmptyState
               icon={Scissors}
               title="No snippets saved"
@@ -285,7 +295,7 @@ function NotesPage() {
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {query.data?.snippets.map((snippet) => (
+              {(query.data?.snippets ?? []).map((snippet) => (
                 <div key={snippet.id} className="rounded-lg border border-border bg-surface">
                   <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">

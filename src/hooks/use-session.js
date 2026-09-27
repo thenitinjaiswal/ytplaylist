@@ -35,16 +35,23 @@ export function SessionProvider({ children }) {
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSession(data.session);
-      } else {
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data?.session) {
+          setSession(data.session);
+        } else {
+          setSession(getDemoSession());
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.warn("Failed to get supabase session:", err);
         setSession(getDemoSession());
-      }
-      setLoading(false);
-    });
+        setLoading(false);
+      });
 
-    return () => subscription.subscription.unsubscribe();
+    return () => subscription?.subscription?.unsubscribe?.();
   }, []);
 
   const value = useMemo(

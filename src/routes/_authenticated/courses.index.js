@@ -91,8 +91,8 @@ function CoursesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">My courses</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {query.data?.courses.length ?? 0} imported{" "}
-            {(query.data?.courses.length ?? 0) === 1 ? "playlist" : "playlists"}
+            {query.data?.courses?.length ?? 0} imported{" "}
+            {(query.data?.courses?.length ?? 0) === 1 ? "playlist" : "playlists"}
           </p>
         </div>
         <Button asChild size="sm" className="gap-2">
