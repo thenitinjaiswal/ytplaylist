@@ -99,7 +99,7 @@ export function PushToGithubModal({
   const handleConnectToken = useMutation({
     mutationFn: async () => {
       if (!tokenInput.trim()) throw new Error("Please enter a GitHub Personal Access Token.");
-      const res = await saveToken({ token: tokenInput.trim() });
+      const res = await saveToken({ data: { token: tokenInput.trim() } });
       if (!res.ok) throw new Error(res.error || "Failed to connect GitHub token.");
       return res;
     },
@@ -114,7 +114,7 @@ export function PushToGithubModal({
 
   const handleOAuthConnect = async () => {
     try {
-      const res = await getAuthUrl({ redirectUri: window.location.href });
+      const res = await getAuthUrl({ data: { redirectUri: window.location.href } });
       if (res.ok && res.url) {
         window.location.href = res.url;
       } else {
@@ -144,9 +144,11 @@ export function PushToGithubModal({
         }
 
         const createRes = await makeRepo({
-          name: newRepoName.trim(),
-          description: `CodeStudy workspace code for ${lessonTitle}`,
-          isPrivate,
+          data: {
+            name: newRepoName.trim(),
+            description: `CodeStudy workspace code for ${lessonTitle}`,
+            isPrivate,
+          },
         });
 
         if (!createRes.ok || !createRes.repo) {
@@ -165,12 +167,14 @@ export function PushToGithubModal({
 
       // Execute Commit and Push
       const pushRes = await doPush({
-        fullName: targetFullName,
-        branch: branch.trim() || "main",
-        message: commitMessage.trim() || `Update ${lessonTitle}`,
-        directory: directory.trim() || undefined,
-        lessonId: lessonId || null,
-        files: filesToPush,
+        data: {
+          fullName: targetFullName,
+          branch: branch.trim() || "main",
+          message: commitMessage.trim() || `Update ${lessonTitle}`,
+          directory: directory.trim() || undefined,
+          lessonId: lessonId || null,
+          files: filesToPush,
+        },
       });
 
       if (!pushRes.ok) {

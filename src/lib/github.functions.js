@@ -550,34 +550,50 @@ export const commitAndPush = createServerFn({ method: "POST" })
     const dir = (data.directory ?? "").replace(/^\/+|\/+$/g, "");
     if (dir.includes("..")) return { ok: false, error: "Invalid directory." };
 
-    const ref = await gh(token, `/repos/${data.fullName}/git/ref/heads/${data.branch}`);
+    let ref = await gh(token, `/repos/${data.fullName}/git/ref/heads/${data.branch}`);
+    let baseCommitSha = null;
+    let baseTreeSha = null;
+
     if (!ref.ok) {
-      return {
-        ok: false,
-        error:
-          ref.status === 404
-            ? `Branch "${data.branch}" does not exist in repository "${data.fullName}".`
-            : ref.error,
-      };
+      // Check repository info
+      const repoInfo = await gh(token, `/repos/${data.fullName}`);
+      if (!repoInfo.ok) {
+        return { ok: false, error: repoInfo.error || `Repository "${data.fullName}" not found.` };
+      }
+
+      const defaultBranch = repoInfo.data.default_branch || "main";
+      if (defaultBranch !== data.branch) {
+        const defaultRef = await gh(token, `/repos/${data.fullName}/git/ref/heads/${defaultBranch}`);
+        if (defaultRef.ok) {
+          baseCommitSha = defaultRef.data.object.sha;
+        }
+      }
+    } else {
+      baseCommitSha = ref.data.object.sha;
     }
 
-    const baseCommit = await gh(
-      token,
-      `/repos/${data.fullName}/git/commits/${ref.data.object.sha}`,
-    );
-    if (!baseCommit.ok) return { ok: false, error: baseCommit.error };
+    if (baseCommitSha) {
+      const baseCommit = await gh(token, `/repos/${data.fullName}/git/commits/${baseCommitSha}`);
+      if (baseCommit.ok) {
+        baseTreeSha = baseCommit.data.tree.sha;
+      }
+    }
+
+    const treePayload = {
+      tree: data.files.map((f) => ({
+        path: dir ? `${dir}/${f.path}` : f.path,
+        mode: "100644",
+        type: "blob",
+        content: f.content,
+      })),
+    };
+    if (baseTreeSha) {
+      treePayload.base_tree = baseTreeSha;
+    }
 
     const tree = await gh(token, `/repos/${data.fullName}/git/trees`, {
       method: "POST",
-      body: {
-        base_tree: baseCommit.data.tree.sha,
-        tree: data.files.map((f) => ({
-          path: dir ? `${dir}/${f.path}` : f.path,
-          mode: "100644",
-          type: "blob",
-          content: f.content,
-        })),
-      },
+      body: treePayload,
     });
     if (!tree.ok) return { ok: false, error: tree.error };
 
@@ -586,16 +602,24 @@ export const commitAndPush = createServerFn({ method: "POST" })
       body: {
         message: data.message,
         tree: tree.data.sha,
-        parents: [ref.data.object.sha],
+        parents: baseCommitSha ? [baseCommitSha] : [],
       },
     });
     if (!commit.ok) return { ok: false, error: commit.error };
 
-    const update = await gh(token, `/repos/${data.fullName}/git/refs/heads/${data.branch}`, {
-      method: "PATCH",
-      body: { sha: commit.data.sha, force: false },
-    });
-    if (!update.ok) return { ok: false, error: update.error };
+    if (ref.ok) {
+      const update = await gh(token, `/repos/${data.fullName}/git/refs/heads/${data.branch}`, {
+        method: "PATCH",
+        body: { sha: commit.data.sha, force: false },
+      });
+      if (!update.ok) return { ok: false, error: update.error };
+    } else {
+      const createRef = await gh(token, `/repos/${data.fullName}/git/refs`, {
+        method: "POST",
+        body: { ref: `refs/heads/${data.branch}`, sha: commit.data.sha },
+      });
+      if (!createRef.ok) return { ok: false, error: createRef.error };
+    }
 
     try {
       const { data: repoRow } = await context.supabase
