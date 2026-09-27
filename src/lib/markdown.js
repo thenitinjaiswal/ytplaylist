@@ -14,6 +14,12 @@ function inline(text) {
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|\W)\*([^*\n]+)\*/g, "$1<em>$2</em>");
   out = out.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  // Markdown images: ![alt](url)
+  out = out.replace(
+    /!\[([^\]]*)\]\((https?:\/\/[^\s)]+|data:image\/[^\s)]+)\)/g,
+    '<img src="$2" alt="$1" class="my-2 max-h-96 max-w-full rounded-md border border-border object-contain shadow-xs inline-block" loading="lazy" />',
+  );
+  // Markdown links: [text](url)
   out = out.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
     '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>',
@@ -172,6 +178,7 @@ export const SLASH_COMMANDS = [
   { label: "Callout", hint: "> **Note**", insert: "> **Note** " },
   { label: "Table", hint: "3 columns", insert: "| A | B | C |\n| --- | --- | --- |\n|  |  |  |\n" },
   { label: "Divider", hint: "---", insert: "\n---\n" },
+  { label: "Image", hint: "![alt](url)", insert: "![Image description](https://)" },
   { label: "Link", hint: "[text](url)", insert: "[text](https://)" },
   {
     label: "Collapsible",

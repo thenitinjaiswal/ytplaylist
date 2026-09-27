@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getRuntimeVersion, runCode } from "@/lib/execute.functions";
-import { getGithubStatus, listRepos, commitAndPush } from "@/lib/github.functions";
+import { getGithubStatus, listRepos, commitAndPush, connectGithubToken } from "@/lib/github.functions";
 import {
   RUNNABLE_LANGUAGES,
   ENABLED_LANGUAGES,
@@ -89,12 +89,14 @@ export function CodeIDE({
   const getGhStatus = useServerFn(getGithubStatus);
   const getGhRepos = useServerFn(listRepos);
   const pushCommit = useServerFn(commitAndPush);
+  const connectToken = useServerFn(connectGithubToken);
 
   const [pushGithubOpen, setPushGithubOpen] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState("");
   const [commitBranch, setCommitBranch] = useState("main");
   const [commitMessage, setCommitMessage] = useState("");
   const [commitDirectory, setCommitDirectory] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
 
   const ghStatusQuery = useQuery({
     queryKey: ["github-status"],
@@ -106,6 +108,23 @@ export function CodeIDE({
     queryKey: ["github-repos"],
     queryFn: () => getGhRepos({}),
     enabled: pushGithubOpen && Boolean(ghStatusQuery.data?.connected),
+  });
+
+  const connectMutation = useMutation({
+    mutationFn: async (token) => {
+      const res = await connectToken({ data: { token } });
+      if (!res.ok) throw new Error(res.error || "Failed to connect GitHub");
+      return res;
+    },
+    onSuccess: (data) => {
+      toast.success(`Connected to GitHub as @${data.login}!`);
+      setTokenInput("");
+      queryClient.invalidateQueries({ queryKey: ["github-status"] });
+      queryClient.invalidateQueries({ queryKey: ["github-repos"] });
+    },
+    onError: (err) => {
+      toast.error(err.message || "Could not connect to GitHub");
+    },
   });
 
   const [language, setLanguage] = useState(recommendedLanguage);
@@ -561,8 +580,12 @@ export function CodeIDE({
       save: () => commands.current.save(),
       toggleTerminal: () => setTerminalOpen((prev) => !prev),
       toggleExplorer: () => setExplorerOpen((prev) => !prev),
+      pushGithub: () => {
+        setCommitMessage(`feat: code for ${lessonTitle}`);
+        setPushGithubOpen(true);
+      },
     });
-  }, [onApiReady]);
+  }, [onApiReady, lessonTitle]);
 
   /* ------------------------------------------------------------------- UI */
 
@@ -624,15 +647,15 @@ export function CodeIDE({
         </Button>
         <Button
           size="sm"
-          variant="ghost"
-          className="shrink-0 gap-1.5"
+          variant="outline"
+          className="shrink-0 gap-1.5 border-border/80 bg-[#24292e]/20 hover:bg-[#24292e]/40 text-foreground font-medium"
           onClick={() => {
             setCommitMessage(`feat: code for ${lessonTitle}`);
             setPushGithubOpen(true);
           }}
-          title="Push workspace to GitHub"
+          title="Push workspace code to GitHub"
         >
-          <Github className="size-3.5" /> Push
+          <Github className="size-3.5 text-primary" /> Push
         </Button>
         <Button
           size="sm"
@@ -910,20 +933,77 @@ export function CodeIDE({
               <Skeleton className="h-20 w-full" />
             </div>
           ) : !ghStatusQuery.data?.connected ? (
-            <div className="space-y-4 py-4">
-              <div className="rounded-lg border border-border bg-muted/40 p-4 text-center">
-                <Github className="mx-auto size-8 text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium text-foreground">GitHub is not connected</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Connect your GitHub account to commit and push code directly from this workspace.
+            <div className="space-y-4 py-3">
+              <div className="rounded-lg border border-border bg-surface p-4 text-center space-y-2">
+                <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Github className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Connect your GitHub Account</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Connect once to push lesson code and repositories directly from LearnFlow IDE.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 rounded-lg border border-border/80 bg-elevated/40 p-3.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="quick-gh-token" className="text-xs font-medium">
+                    Personal Access Token
+                  </Label>
+                  <a
+                    href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=LearnFlow%20Studio"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    Generate on GitHub
+                    <ExternalLink className="size-2.5" />
+                  </a>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="quick-gh-token"
+                    type="password"
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    className="h-8 font-mono text-xs"
+                    autoComplete="off"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs shrink-0 gap-1.5"
+                    disabled={!tokenInput.trim() || connectMutation.isPending}
+                    onClick={() => connectMutation.mutate(tokenInput.trim())}
+                  >
+                    {connectMutation.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Github className="size-3.5" />
+                    )}
+                    Connect
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Requires <code>repo</code> and <code>read:user</code> scopes.
                 </p>
               </div>
 
               <DialogFooter>
-                <Button asChild size="sm" className="w-full gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPushGithubOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button asChild variant="ghost" size="sm" className="gap-1.5 text-xs">
                   <Link to="/github">
-                    Open GitHub Page
-                    <ExternalLink className="size-3.5" />
+                    Manage GitHub
+                    <ExternalLink className="size-3" />
                   </Link>
                 </Button>
               </DialogFooter>
@@ -936,10 +1016,32 @@ export function CodeIDE({
               }}
               className="space-y-4 py-2"
             >
-              <div className="space-y-2">
-                <Label htmlFor="repo-select">Target Repository</Label>
+              {/* Connected GitHub account header */}
+              <div className="flex items-center justify-between rounded-md border border-border/80 bg-elevated/40 px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-6 items-center justify-center rounded-full bg-primary/20 text-primary font-bold text-[10px]">
+                    {ghStatusQuery.data?.login?.slice(0, 2).toUpperCase() || "GH"}
+                  </div>
+                  <span className="font-medium text-foreground">
+                    Connected as @{ghStatusQuery.data?.login}
+                  </span>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-medium">Ready to push</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="repo-select" className="text-xs">
+                  Target Repository
+                </Label>
                 {ghReposQuery.isLoading ? (
                   <Skeleton className="h-9 w-full" />
+                ) : (ghReposQuery.data?.repos || []).length === 0 ? (
+                  <div className="rounded-md border border-border bg-surface p-3 text-center text-xs text-muted-foreground">
+                    No repositories found in your account.{" "}
+                    <Link to="/github" className="text-primary hover:underline">
+                      Create one on GitHub
+                    </Link>
+                  </div>
                 ) : (
                   <Select
                     value={selectedRepo}
@@ -949,12 +1051,12 @@ export function CodeIDE({
                       if (r?.defaultBranch) setCommitBranch(r.defaultBranch);
                     }}
                   >
-                    <SelectTrigger id="repo-select">
+                    <SelectTrigger id="repo-select" className="h-8 text-xs font-mono">
                       <SelectValue placeholder="Select a repository" />
                     </SelectTrigger>
                     <SelectContent>
                       {(ghReposQuery.data?.repos || []).map((r) => (
-                        <SelectItem key={r.id} value={r.fullName}>
+                        <SelectItem key={r.id} value={r.fullName} className="text-xs font-mono">
                           {r.fullName} ({r.private ? "Private" : "Public"})
                         </SelectItem>
                       ))}
@@ -979,7 +1081,7 @@ export function CodeIDE({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="repo-dir" className="text-xs">
-                    Directory (optional)
+                    Folder Path (optional)
                   </Label>
                   <Input
                     id="repo-dir"
@@ -1028,12 +1130,12 @@ export function CodeIDE({
                   type="submit"
                   size="sm"
                   disabled={!selectedRepo || commitMutation.isPending}
-                  className="gap-2"
+                  className="gap-2 font-medium bg-[#24292e] text-white hover:bg-[#1b1f23]"
                 >
                   {commitMutation.isPending ? (
                     <>
                       <Loader2 className="size-3.5 animate-spin" />
-                      Pushing...
+                      Pushing to GitHub...
                     </>
                   ) : (
                     <>

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Clock, FileText, Plus, Scissors, Trash2 } from "lucide-react";
+import { Clock, FileText, Image as ImageIcon, Loader2, Plus, Scissors, Trash2, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { renderMarkdown } from "@/lib/markdown";
+import { uploadNoteImage } from "@/lib/notes-image";
 import { formatClock, formatRelative } from "@/lib/format";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,8 @@ function NotesPage() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState(search.note ?? null);
   const [draft, setDraft] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
 
   const query = useQuery({
     queryKey: ["notes-page"],
@@ -85,6 +88,58 @@ function NotesPage() {
     if (active) setDraft({ title: active.title, content: active.content });
   }, [active]);
 
+  const insertImageToDraft = async (file) => {
+    if (!file || !file.type.startsWith("image/")) {
+      toast.error("Please select a valid image file");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const { url, alt } = await uploadNoteImage(file);
+      setDraft((prev) => {
+        if (!prev) return prev;
+        const currentContent = prev.content || "";
+        const imageMarkdown = `\n![${alt}](${url})\n`;
+        return {
+          ...prev,
+          content: `${currentContent}${imageMarkdown}`,
+        };
+      });
+      toast.success("Image attached to note!");
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      toast.error("Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) void insertImageToDraft(file);
+        return;
+      }
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].type.startsWith("image/")) {
+          void insertImageToDraft(files[i]);
+          return;
+        }
+      }
+    }
+  };
+
   const save = useMutation({
     mutationFn: async () => {
       if (!active || !draft) return;
@@ -98,7 +153,7 @@ function NotesPage() {
       toast.success("Note saved");
       queryClient.invalidateQueries({ queryKey: ["notes-page"] });
     },
-    onError: () => toast.error("Could not save that note"),
+    onError: () => toast.error("Could not save note"),
   });
 
   const create = useMutation({
@@ -218,13 +273,40 @@ function NotesPage() {
 
               {active && draft ? (
                 <div className="space-y-3 rounded-lg border border-border bg-surface p-4">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void insertImageToDraft(file);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                  />
                   <div className="flex gap-2">
                     <Input
                       value={draft.title}
                       onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                       className="text-base font-semibold"
                     />
-                    <Button onClick={() => save.mutate()} disabled={save.isPending}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage}
+                      className="gap-1.5 text-xs shrink-0"
+                      title="Attach image or paste directly (Ctrl+V)"
+                    >
+                      {uploadingImage ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <ImageIcon className="size-3.5 text-emerald-400" />
+                      )}
+                      Add Image
+                    </Button>
+                    <Button onClick={() => save.mutate()} disabled={save.isPending || uploadingImage}>
                       Save
                     </Button>
                     <Button
@@ -236,19 +318,31 @@ function NotesPage() {
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
-                  <Textarea
-                    value={draft.content}
-                    onChange={(event) => setDraft({ ...draft, content: event.target.value })}
-                    placeholder="Write markdown… # heading, - list, ```code```"
-                    className="min-h-56 font-mono text-sm"
-                  />
+                  <div className="relative">
+                    <Textarea
+                      value={draft.content}
+                      onChange={(event) => setDraft({ ...draft, content: event.target.value })}
+                      onPaste={handlePaste}
+                      onDrop={handleDrop}
+                      placeholder="Write markdown… # heading, - list, ```code```. Paste images directly with Ctrl+V or click Add Image!"
+                      className="min-h-56 font-mono text-sm leading-relaxed"
+                    />
+                    {uploadingImage ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-surface/70 backdrop-blur-xs rounded-md">
+                        <div className="flex items-center gap-2 text-xs font-medium text-foreground bg-elevated px-3 py-1.5 rounded-md border border-border shadow-md">
+                          <Loader2 className="size-4 animate-spin text-primary" />
+                          Uploading image...
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="rounded-md border border-border bg-elevated/40 p-4">
                     <p className="mb-3 text-mono-xs uppercase tracking-widest text-muted-foreground">
                       Preview
                     </p>
                     <div
                       className="prose-note"
-                      dangerouslySetInnerHTML={{ __html: renderMarkdown(draft.content) }}
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(draft.content || "") }}
                     />
                   </div>
                 </div>

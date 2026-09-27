@@ -8,6 +8,7 @@ import {
   Check,
   Code2,
   Expand,
+  Github,
   ListVideo,
   Maximize,
   NotebookPen,
@@ -402,6 +403,7 @@ function WorkspacePage() {
         b: () => toggleVisible("lessons"),
         j: () => ideApi.current?.toggleTerminal(),
         m: () => toggleMaximize("code"),
+        g: () => ideApi.current?.pushGithub?.(),
         p: () => commitCanvas((prev) => ({ ...prev, videoBackground: !prev.videoBackground })),
       };
       const action = map[event.key.toLowerCase()];
@@ -417,6 +419,12 @@ function WorkspacePage() {
     () => [
       { id: "ws-run", label: "Run code", shortcut: "Ctrl+↵", run: () => ideApi.current?.run() },
       { id: "ws-save", label: "Save workspace", run: () => ideApi.current?.save() },
+      {
+        id: "ws-github",
+        label: "Push workspace to GitHub",
+        shortcut: "Alt+G",
+        run: () => ideApi.current?.pushGithub?.(),
+      },
       {
         id: "ws-terminal",
         label: "Toggle terminal",
@@ -614,6 +622,16 @@ function WorkspacePage() {
         </>
       )}
 
+      <Button
+        size="sm"
+        variant="outline"
+        className="shrink-0 gap-1.5 border-border/80 bg-[#24292e]/10 hover:bg-[#24292e]/30 text-foreground font-medium text-xs h-8"
+        onClick={() => ideApi.current?.pushGithub?.()}
+        title="Push workspace code to GitHub (Alt+G)"
+      >
+        <Github className="size-3.5 text-primary" /> Push to GitHub
+      </Button>
+
       <Button size="sm" className="shrink-0 gap-1.5" onClick={() => complete.mutate()}>
         <Check className="size-4" /> Complete
       </Button>
@@ -756,7 +774,21 @@ function WorkspacePage() {
               </div>
             ) : null}
 
-            <FloatingWindow {...windowProps("code")} icon={<Code2 className="size-3.5" />}>
+            <FloatingWindow
+              {...windowProps("code")}
+              icon={<Code2 className="size-3.5" />}
+              actions={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-1.5 text-xs gap-1 font-medium text-foreground hover:bg-[#24292e]/30"
+                  onClick={() => ideApi.current?.pushGithub?.()}
+                  title="Push code to GitHub (Alt+G)"
+                >
+                  <Github className="size-3 text-primary" /> Push
+                </Button>
+              }
+            >
               {ide}
             </FloatingWindow>
 
