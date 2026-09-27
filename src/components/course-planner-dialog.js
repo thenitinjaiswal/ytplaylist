@@ -90,19 +90,34 @@ export function CoursePlannerDialog({
   const effectiveRemainingSeconds = Math.round(remainingRawSeconds / speed);
   const timeSavedSeconds = Math.max(0, remainingRawSeconds - effectiveRemainingSeconds);
 
-  // Initialize target date string
+  // Initialize target date string and speed
   useEffect(() => {
     if (open) {
-      const initialDays = currentTargetDays || Math.max(7, Math.ceil(effectiveRemainingSeconds / ((currentDailyTarget || 60) * 60)));
+      const storedSpeed =
+        typeof window !== "undefined"
+          ? Number(localStorage.getItem("codestudy.playback_speed"))
+          : null;
+      const effectiveSpeed = Number(currentSpeed) || storedSpeed || 1;
+      setSpeed(effectiveSpeed);
+
+      const initialDays =
+        currentTargetDays ||
+        Math.max(7, Math.ceil(effectiveRemainingSeconds / ((currentDailyTarget || 60) * 60)));
       setTargetDays(initialDays);
       setDailyMinutes(currentDailyTarget || 60);
-      setSpeed(Number(currentSpeed) || 1);
 
       const finishDate = new Date();
       finishDate.setDate(finishDate.getDate() + initialDays);
       setTargetDateStr(finishDate.toISOString().slice(0, 10));
     }
-  }, [open, currentTargetDays, currentDailyTarget, currentSpeed, effectiveRemainingSeconds]);
+  }, [open, currentTargetDays, currentDailyTarget, currentSpeed]);
+
+  const handleSelectSpeed = (s) => {
+    setSpeed(s);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("codestudy.playback_speed", String(s));
+    }
+  };
 
   // When Target Date is changed, compute target days
   const handleDateChange = (e) => {
@@ -117,9 +132,10 @@ export function CoursePlannerDialog({
   };
 
   // When Target Days is changed from Duration mode, compute required daily time
-  const activeDays = plannerMode === "daily"
-    ? Math.max(1, Math.ceil(effectiveRemainingSeconds / (dailyMinutes * 60)))
-    : targetDays;
+  const activeDays =
+    plannerMode === "daily"
+      ? Math.max(1, Math.ceil(effectiveRemainingSeconds / (dailyMinutes * 60)))
+      : targetDays;
 
   // Calculated daily watch time in minutes
   const calculatedDailyMins = useMemo(() => {
@@ -144,45 +160,64 @@ export function CoursePlannerDialog({
   const handleSavePlan = async () => {
     setSaving(true);
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth?.user) throw new Error("Not signed in");
+      // 1. Immediately save to localStorage for client-side instant reactivity
+      if (typeof window !== "undefined") {
+        localStorage.setItem("codestudy.playback_speed", String(speed));
+        localStorage.setItem("codestudy.daily_target_minutes", String(calculatedDailyMins));
+        if (course?.id) {
+          localStorage.setItem(`codestudy.course_${course.id}_target_days`, String(activeDays));
+          localStorage.setItem(`codestudy.course_${course.id}_daily_cap`, String(calculatedDailyMins));
+        }
+      }
 
-      // 1. Save preferences (playback_speed and daily_target_minutes)
-      await supabase.from("preferences").upsert(
-        {
-          user_id: auth.user.id,
-          playback_speed: speed,
-          daily_target_minutes: calculatedDailyMins,
-        },
-        { onConflict: "user_id" },
-      );
+      // 2. Try saving to Supabase if signed in
+      try {
+        const { data: auth } = await supabase.auth.getUser().catch(() => ({ data: null }));
+        if (auth?.user) {
+          // Save preferences (playback_speed and daily_target_minutes)
+          await supabase.from("preferences").upsert(
+            {
+              user_id: auth.user.id,
+              playback_speed: speed,
+              daily_target_minutes: calculatedDailyMins,
+            },
+            { onConflict: "user_id" },
+          );
 
-      // 2. Save course target days and daily cap
-      await supabase
-        .from("courses")
-        .update({
-          target_days: activeDays,
-          daily_cap_minutes: calculatedDailyMins,
-        })
-        .eq("id", course.id);
+          // Save course target days and daily cap
+          if (course?.id) {
+            await supabase
+              .from("courses")
+              .update({
+                target_days: activeDays,
+                daily_cap_minutes: calculatedDailyMins,
+              })
+              .eq("id", course.id);
+          }
 
-      // 3. Re-assign scheduled_day for lessons
-      const scaledLessons = scaleForSpeed(lessons, speed);
-      const scheduleMap = assignScheduledDays(scaledLessons, activeDays);
+          // Re-assign scheduled_day for lessons
+          if (lessons?.length > 0) {
+            const scaledLessons = scaleForSpeed(lessons, speed);
+            const scheduleMap = assignScheduledDays(scaledLessons, activeDays);
 
-      const updates = lessons.map((l) => ({
-        id: l.id,
-        scheduled_day: scheduleMap.get(l.id) || 1,
-      }));
+            const updates = lessons.map((l) => ({
+              id: l.id,
+              scheduled_day: scheduleMap.get(l.id) || 1,
+            }));
 
-      // Batch update in chunks of 50
-      for (let i = 0; i < updates.length; i += 50) {
-        const chunk = updates.slice(i, i + 50);
-        await Promise.all(
-          chunk.map((item) =>
-            supabase.from("lessons").update({ scheduled_day: item.scheduled_day }).eq("id", item.id),
-          ),
-        );
+            // Batch update in chunks of 50
+            for (let i = 0; i < updates.length; i += 50) {
+              const chunk = updates.slice(i, i + 50);
+              await Promise.all(
+                chunk.map((item) =>
+                  supabase.from("lessons").update({ scheduled_day: item.scheduled_day }).eq("id", item.id),
+                ),
+              );
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn("Supabase plan sync error (saved locally):", dbErr);
       }
 
       toast.success(`Study plan updated! Target: ${activeDays} days at ${speed}x speed.`, {
@@ -198,6 +233,7 @@ export function CoursePlannerDialog({
 
       onOpenChange(false);
     } catch (err) {
+      console.error("Save plan error:", err);
       toast.error(err.message || "Failed to save study plan");
     } finally {
       setSaving(false);
@@ -352,7 +388,7 @@ export function CoursePlannerDialog({
                 <button
                   key={s}
                   type="button"
-                  onClick={() => setSpeed(s)}
+                  onClick={() => handleSelectSpeed(s)}
                   className={`flex-1 py-1.5 rounded-md border text-center font-mono text-xs transition ${
                     speed === s
                       ? "border-primary bg-primary text-primary-foreground font-semibold shadow-sm"
@@ -419,7 +455,7 @@ export function CoursePlannerDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="sticky bottom-0 bg-surface/95 backdrop-blur border-t border-border pt-3 gap-2 sm:gap-0">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>

@@ -63,6 +63,13 @@ function CoursePage() {
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [expandedDays, setExpandedDays] = useState(new Set([1])); // Day 1 open by default
   const [expandedMonths, setExpandedMonths] = useState(new Set([1])); // Month 1 open by default
+  const [overrideSpeed, setOverrideSpeed] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("codestudy.playback_speed");
+      if (stored) return Number(stored);
+    }
+    return null;
+  });
 
   const query = useQuery({
     queryKey: ["course", courseId],
@@ -119,7 +126,11 @@ function CoursePage() {
   const data = query.data;
 
   // Stats and Plan Settings
-  const speed = Number(data?.prefs?.playback_speed ?? 1);
+  const speed = Number(
+    overrideSpeed ??
+      data?.prefs?.playback_speed ??
+      (typeof window !== "undefined" ? Number(localStorage.getItem("codestudy.playback_speed")) || 1 : 1),
+  );
   const dailyTargetMinutes = Number(data?.course?.daily_cap_minutes || data?.prefs?.daily_target_minutes || 60);
   const targetDays = Number(data?.course?.target_days || 60);
 
@@ -337,7 +348,12 @@ function CoursePage() {
                 ~{dailyTargetMinutes}m daily target
               </Badge>
 
-              <Badge variant="secondary" className="gap-1 font-mono text-[11px] py-0.5 px-2">
+              <Badge
+                variant="secondary"
+                onClick={() => setPlannerOpen(true)}
+                className="cursor-pointer hover:bg-emerald-500/20 hover:border-emerald-500/40 transition gap-1 font-mono text-[11px] py-0.5 px-2 border border-border"
+                title="Click to adjust playback speed & daily pacing"
+              >
                 <Zap className="size-3 text-emerald-400" />
                 {speed}x Video Speed
               </Badge>
@@ -814,7 +830,10 @@ function CoursePage() {
         currentDailyTarget={dailyTargetMinutes}
         currentSpeed={speed}
         currentTargetDays={targetDays}
-        onPlanSaved={() => {
+        onPlanSaved={(plan) => {
+          if (plan?.speed) {
+            setOverrideSpeed(Number(plan.speed));
+          }
           queryClient.invalidateQueries({ queryKey: ["course", courseId] });
           queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         }}

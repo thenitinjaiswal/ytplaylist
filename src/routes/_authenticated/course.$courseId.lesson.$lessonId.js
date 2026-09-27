@@ -13,6 +13,7 @@ import {
   NotebookPen,
   RotateCcw,
   Youtube,
+  Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { detectLanguage, getLanguage } from "@/lib/languages";
@@ -98,6 +99,13 @@ function WorkspacePage() {
   const [canvas, setCanvas] = useState(null);
   const [snap, setSnap] = useState(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("codestudy.playback_speed");
+      if (stored) return Number(stored);
+    }
+    return 1;
+  });
 
   const rootRef = useRef(null);
   const shellRef = useRef(null);
@@ -295,7 +303,32 @@ function WorkspacePage() {
   useEffect(() => {
     if (!query.data) return;
     setNotes(query.data.note?.content ?? "");
+    if (query.data.prefs?.playback_speed) {
+      const dbSpeed = Number(query.data.prefs.playback_speed);
+      setPlaybackSpeed(dbSpeed);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("codestudy.playback_speed", String(dbSpeed));
+      }
+    }
   }, [query.data]);
+
+  const handleSpeedChange = useCallback((newSpeed) => {
+    const rate = Number(newSpeed) || 1;
+    setPlaybackSpeed(rate);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("codestudy.playback_speed", String(rate));
+    }
+    videoApi.current?.setPlaybackRate(rate);
+    void supabase.auth.getUser().then(({ data: auth }) => {
+      if (auth?.user) {
+        supabase
+          .from("preferences")
+          .upsert({ user_id: auth.user.id, playback_speed: rate }, { onConflict: "user_id" })
+          .catch(() => {});
+      }
+    });
+    toast.success(`Video speed set to ${rate}x`);
+  }, []);
 
   const saveNotes = useMutation({
     mutationFn: async (silent) => {
@@ -446,7 +479,7 @@ function WorkspacePage() {
       videoId={lesson.video_id}
       startAt={startAt}
       title={lesson.title ?? "Lesson video"}
-      playbackSpeed={Number(prefs?.playback_speed ?? 1)}
+      playbackSpeed={playbackSpeed}
       onApi={onVideoApi}
     />
   ) : (
@@ -492,6 +525,26 @@ function WorkspacePage() {
       <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
         {lesson?.title ?? "Lesson"}
       </h1>
+
+      {/* Playback Speed Selector in Toolbar */}
+      <Select value={String(playbackSpeed)} onValueChange={handleSpeedChange}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SelectTrigger className="h-8 w-[88px] shrink-0 font-mono text-xs gap-1 border-border/80 bg-surface/80">
+              <Zap className="size-3 text-amber-400 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Video Playback Speed</TooltipContent>
+        </Tooltip>
+        <SelectContent>
+          {[1, 1.25, 1.5, 1.75, 2].map((s) => (
+            <SelectItem key={s} value={String(s)} className="font-mono text-xs">
+              {s}x Speed
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {isMobile ? null : (
         <>
@@ -648,14 +701,29 @@ function WorkspacePage() {
               }
               onClose={() => commitCanvas((prev) => ({ ...prev, videoBackground: true }))}
               actions={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-1.5 text-xs"
-                  onClick={() => commitCanvas((prev) => ({ ...prev, videoBackground: true }))}
-                >
-                  Dock as background
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Select value={String(playbackSpeed)} onValueChange={handleSpeedChange}>
+                    <SelectTrigger className="h-6 w-[70px] font-mono text-[10px] px-1.5 py-0 border-border/80 bg-surface/80">
+                      <Zap className="size-2.5 text-amber-400 mr-0.5" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 1.25, 1.5, 1.75, 2].map((s) => (
+                        <SelectItem key={s} value={String(s)} className="font-mono text-xs">
+                          {s}x
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-xs"
+                    onClick={() => commitCanvas((prev) => ({ ...prev, videoBackground: true }))}
+                  >
+                    Dock as background
+                  </Button>
+                </div>
               }
               bodyClassName="bg-black"
             >

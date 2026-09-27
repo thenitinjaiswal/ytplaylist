@@ -41,11 +41,14 @@ export const WorkspaceVideo = memo(function WorkspaceVideo({
   const speedRef = useRef(playbackSpeed);
 
   useEffect(() => {
-    speedRef.current = Number(playbackSpeed) || 1;
+    const rate = Number(playbackSpeed) || 1;
+    speedRef.current = rate;
     if (playerRef.current?.setPlaybackRate) {
       try {
-        playerRef.current.setPlaybackRate(speedRef.current);
-      } catch {}
+        playerRef.current.setPlaybackRate(rate);
+      } catch (err) {
+        console.warn("Could not set playback rate on player:", err);
+      }
     }
   }, [playbackSpeed]);
 
@@ -76,7 +79,8 @@ export const WorkspaceVideo = memo(function WorkspaceVideo({
             } catch {}
           },
           onStateChange: (e) => {
-            if (e.data === yt.PlayerState.PLAYING) {
+            // Enforce preferred playback rate when playback starts or buffers
+            if (e.data === yt.PlayerState.PLAYING || e.data === yt.PlayerState.BUFFERING) {
               try {
                 const rate = Number(speedRef.current) || 1;
                 e.target.setPlaybackRate(rate);
@@ -91,9 +95,18 @@ export const WorkspaceVideo = memo(function WorkspaceVideo({
         pause: () => player.pauseVideo?.(),
         seekTo: (seconds) => player.seekTo?.(seconds, true),
         setPlaybackRate: (rate) => {
+          const r = Number(rate) || 1;
+          speedRef.current = r;
           try {
-            player.setPlaybackRate?.(Number(rate) || 1);
+            player.setPlaybackRate?.(r);
           } catch {}
+        },
+        getPlaybackRate: () => {
+          try {
+            return player.getPlaybackRate?.() ?? speedRef.current;
+          } catch {
+            return speedRef.current;
+          }
         },
         getCurrentTime: () => {
           try {
