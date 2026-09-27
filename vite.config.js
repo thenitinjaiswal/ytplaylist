@@ -83,6 +83,38 @@ function patchCompiledNitro(dir) {
     }
   }
 
+  // Ensure Vercel Build Output API v3 config files exist
+  try {
+    const vercelOutputDir = path.resolve(process.cwd(), ".vercel/output");
+    if (fs.existsSync(vercelOutputDir)) {
+      // 1. Root config.json
+      const configJsonPath = path.join(vercelOutputDir, "config.json");
+      const configJson = {
+        version: 3,
+        routes: [
+          { handle: "filesystem" },
+          { src: "/(.*)", dest: "/__server" },
+        ],
+      };
+      fs.writeFileSync(configJsonPath, JSON.stringify(configJson, null, 2), "utf-8");
+
+      // 2. Function .vc-config.json
+      const serverFuncDir = path.join(vercelOutputDir, "functions", "__server.func");
+      if (fs.existsSync(serverFuncDir)) {
+        const vcConfigPath = path.join(serverFuncDir, ".vc-config.json");
+        const vcConfig = {
+          runtime: "nodejs22.x",
+          handler: "index.mjs",
+          launcherType: "Nodejs",
+          supportsResponseStreaming: true,
+        };
+        fs.writeFileSync(vcConfigPath, JSON.stringify(vcConfig, null, 2), "utf-8");
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to write Vercel Build Output API configs:", err);
+  }
+
   // Also ensure a dist folder exists with static assets as fallback for Vercel's Vite preset
   try {
     const staticDir = path.resolve(process.cwd(), ".vercel/output/static");
