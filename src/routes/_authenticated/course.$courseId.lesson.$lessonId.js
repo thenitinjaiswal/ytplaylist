@@ -446,6 +446,7 @@ function WorkspacePage() {
       videoId={lesson.video_id}
       startAt={startAt}
       title={lesson.title ?? "Lesson video"}
+      playbackSpeed={Number(prefs?.playback_speed ?? 1)}
       onApi={onVideoApi}
     />
   ) : (

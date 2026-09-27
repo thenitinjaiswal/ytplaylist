@@ -28,10 +28,26 @@ function loadYouTubeApi() {
  * Player API; floating windows only move/resize the container, so playback and
  * the current timestamp survive every drag, resize and mode change.
  */
-export const WorkspaceVideo = memo(function WorkspaceVideo({ videoId, startAt, title, onApi }) {
+export const WorkspaceVideo = memo(function WorkspaceVideo({
+  videoId,
+  startAt,
+  title,
+  playbackSpeed = 1,
+  onApi,
+}) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
   const startRef = useRef(startAt);
+  const speedRef = useRef(playbackSpeed);
+
+  useEffect(() => {
+    speedRef.current = Number(playbackSpeed) || 1;
+    if (playerRef.current?.setPlaybackRate) {
+      try {
+        playerRef.current.setPlaybackRate(speedRef.current);
+      } catch {}
+    }
+  }, [playbackSpeed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,12 +68,33 @@ export const WorkspaceVideo = memo(function WorkspaceVideo({ videoId, startAt, t
           modestbranding: 1,
           playsinline: 1,
         },
+        events: {
+          onReady: (e) => {
+            try {
+              const rate = Number(speedRef.current) || 1;
+              e.target.setPlaybackRate(rate);
+            } catch {}
+          },
+          onStateChange: (e) => {
+            if (e.data === yt.PlayerState.PLAYING) {
+              try {
+                const rate = Number(speedRef.current) || 1;
+                e.target.setPlaybackRate(rate);
+              } catch {}
+            }
+          },
+        },
       });
       playerRef.current = player;
       onApi?.({
         play: () => player.playVideo?.(),
         pause: () => player.pauseVideo?.(),
         seekTo: (seconds) => player.seekTo?.(seconds, true),
+        setPlaybackRate: (rate) => {
+          try {
+            player.setPlaybackRate?.(Number(rate) || 1);
+          } catch {}
+        },
         getCurrentTime: () => {
           try {
             return player.getCurrentTime?.() ?? 0;
