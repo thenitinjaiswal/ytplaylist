@@ -91,18 +91,33 @@ export function ProjectsPushModal({
   const [showFilePreview, setShowFilePreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const [localConnected, setLocalConnected] = useState(false);
+  const [connectedLogin, setConnectedLogin] = useState("");
+
   const statusQuery = useQuery({
     queryKey: ["github-status"],
     queryFn: () => getStatus({}),
     enabled: open,
+    staleTime: 0,
   });
 
-  const isConnected = Boolean(statusQuery.data?.connected);
+  const isConnected = Boolean(statusQuery.data?.connected) || localConnected;
+  const currentLogin = statusQuery.data?.login || connectedLogin;
+
+  useEffect(() => {
+    if (statusQuery.data?.connected) {
+      setLocalConnected(true);
+      if (statusQuery.data?.login) {
+        setConnectedLogin(statusQuery.data.login);
+      }
+    }
+  }, [statusQuery.data]);
 
   const reposQuery = useQuery({
     queryKey: ["github-repos"],
     queryFn: () => getRepos({}),
     enabled: open && isConnected,
+    staleTime: 0,
   });
 
   // Calculate prepared files with destination paths
@@ -172,10 +187,20 @@ export function ProjectsPushModal({
     try {
       const res = await connectTokenFn({ data: { token: tokenInput.trim() } });
       if (!res.ok) throw new Error(res.error || "Failed to connect GitHub token.");
+      
       toast.success(`Connected to GitHub as @${res.login}!`);
+      setConnectedLogin(res.login || "");
+      setLocalConnected(true);
       setTokenInput("");
+
       queryClient.invalidateQueries({ queryKey: ["github-status"] });
       queryClient.invalidateQueries({ queryKey: ["github-repos"] });
+
+      await statusQuery.refetch();
+      const reposRes = await reposQuery.refetch();
+      if (reposRes.data?.repos?.length > 0) {
+        setSelectedRepo(reposRes.data.repos[0].fullName);
+      }
     } catch (err) {
       toast.error(err.message || "Could not connect GitHub token.");
     } finally {
@@ -341,6 +366,25 @@ export function ProjectsPushModal({
           </div>
         ) : (
           <div className="space-y-4 py-2">
+            {/* Connected User Badge */}
+            {currentLogin ? (
+              <div className="flex items-center justify-between rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
+                <div className="flex items-center gap-2">
+                  <Github className="size-3.5 text-emerald-400" />
+                  <span>
+                    Connected as <strong>@{currentLogin}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLocalConnected(false)}
+                  className="text-[11px] text-emerald-300/70 hover:text-emerald-200 underline"
+                >
+                  Switch Token
+                </button>
+              </div>
+            ) : null}
+
             {/* Selected Summary Card */}
             <div className="flex items-center justify-between rounded-lg border border-border bg-surface/80 p-3.5 text-xs">
               <div className="flex items-center gap-2">
