@@ -530,9 +530,9 @@ const commitSchema = z.object({
   directory: z.string().max(120).optional(),
   lessonId: z.string().uuid().nullable().optional(),
   files: z
-    .array(z.object({ path: z.string().min(1).max(200), content: z.string().max(500_000) }))
+    .array(z.object({ path: z.string().min(1).max(300), content: z.string().max(1_000_000) }))
     .min(1)
-    .max(60),
+    .max(2000),
 });
 
 export const commitAndPush = createServerFn({ method: "POST" })
