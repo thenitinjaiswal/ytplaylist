@@ -117,7 +117,11 @@ export function AppShell({ children }) {
     await queryClient.cancelQueries();
     queryClient.clear();
     localStorage.removeItem("codestudy.demoUser");
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("Sign out offline:", e);
+    }
     navigate({ to: "/auth", replace: true });
   }
 

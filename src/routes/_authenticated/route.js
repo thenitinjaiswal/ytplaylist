@@ -15,17 +15,24 @@ export const Route = createFileRoute("/_authenticated")({
     }
 
     if (typeof window !== "undefined") {
-      const demoUser = localStorage.getItem("codestudy.demoUser");
-      if (demoUser) {
-        try {
-          const parsed = JSON.parse(demoUser);
-          return { userId: parsed.id };
-        } catch (e) {
-          // invalid JSON
-        }
+      let demoUser = localStorage.getItem("codestudy.demoUser");
+      if (!demoUser) {
+        const defaultUser = {
+          id: "guest-user",
+          email: "user@codestudy.dev",
+          user_metadata: { full_name: "CodeStudy User" },
+        };
+        localStorage.setItem("codestudy.demoUser", JSON.stringify(defaultUser));
+        demoUser = JSON.stringify(defaultUser);
+      }
+      try {
+        const parsed = JSON.parse(demoUser);
+        return { userId: parsed.id };
+      } catch (e) {
+        // invalid JSON
       }
     }
-    throw redirect({ to: "/auth", search: { redirect: location.href } });
+    return { userId: "guest-user" };
   },
   component: () => (
     <AppShell>
